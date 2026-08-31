@@ -1,21 +1,23 @@
+use std::path::Path;
+
 use crate::{buffer::Lang, proc::Cmd, registry::Registry};
 
-struct Pip {}
+pub struct Pip;
 
 impl Registry for Pip {
-    fn can_handle(file: &str) -> bool {
+    fn can_handle(&self, file: &Path) -> bool {
         file.ends_with("pyproject.toml")
     }
 
-    fn latest_version(pkg: &str) -> Cmd {
+    fn latest_version(&self, pkg: &str) -> Cmd {
         Cmd::new("pip3", ["index", "version", "--json", pkg])
     }
 
-    fn latest_version_parse(out: &str) -> String {
+    fn latest_version_parse(&self, out: &str) -> String {
         todo!()
     }
 
-    fn manifest_type() -> Lang {
+    fn manifest_type(&self) -> Lang {
         Lang::Toml
     }
 }

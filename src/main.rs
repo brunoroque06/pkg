@@ -8,58 +8,47 @@ mod registry;
 use std::path::Path;
 
 use crate::{
-    buffer::{Buffer, Lang},
+    buffer::Buffer,
     io::read_file,
+    npm::Npm,
+    pip::Pip,
     proc::{Cmd, run_all},
+    registry::Registry,
 };
 
 fn main() -> Result<(), String> {
-    let src = read_file(Path::new("package.json"))?;
-    println!("{src}");
+    let file = Path::new("package.json");
 
-    let syntax = Buffer::new(src, Lang::Json)?;
+    let regs: [&dyn Registry; 2] = [&Npm, &Pip];
 
-    let node = syntax.get_pairs("devDependencies");
+    let reg = regs
+        .iter()
+        .find(|r| r.can_handle(file))
+        .ok_or(format!("cannot handle file {}", file.to_string_lossy()))?;
 
-    if let Some(deps) = node {
-        for dep in deps {
-            println!("{} - {}", dep.key, dep.value);
-        }
+    let src = read_file(file)?;
+    let syntax = Buffer::new(src, reg.manifest_type())?;
+
+    let deps = syntax
+        .get_pairs("devDependencies")
+        .ok_or("no dependencies found")?;
+
+    let cmds = deps.iter().map(|d| reg.latest_version(d.key)).collect();
+
+    let outs = run_all(cmds)?;
+
+    let latest = deps
+        .iter()
+        .zip(&outs)
+        .map(|(d, o)| (d.key, reg.latest_version_parse(o)))
+        .collect::<Vec<_>>();
+
+    for (d, l) in latest {
+        println!("{d}: {l}");
     }
 
     let versions = run_all(vec![Cmd::new("npm", ["view", "prettier", "version"])])?;
     println!("versions: {}", versions.concat());
-
-    // let outs = fan_out()
-
-    // let mut parser = Parser::new();
-    // parser
-    //     .set_language(&tree_sitter_json::LANGUAGE.into())
-    //     .unwrap();
-
-    // let tree = parser.parse(&src, None).unwrap();
-
-    // let root = tree.root_node().named_child(0).unwrap();
-
-    // let name = get_node(root, &src, "name").unwrap();
-    // let name_pos = name.start_position();
-    // let name_val = name.utf8_text(src.as_bytes()).unwrap();
-    // println!("{name_val}:{name_pos}");
-
-    // let dev_deps = get_node(root, &src, "devDependencies").unwrap();
-    // let prettier = get_node(dev_deps, &src, "prettier").unwrap();
-    // let prettier_pos = prettier.start_position();
-    // let prettier_val = prettier.utf8_text(src.as_bytes()).unwrap();
-    // println!("{prettier_val}:{prettier_pos}");
-
-    // let updated = format!(
-    //     "{}{}{}",
-    //     &src[..prettier.start_byte()],
-    //     "\"new version!\"",
-    //     &src[prettier.end_byte()..]
-    // );
-
-    // write_file(Path::new("package-update.json"), &updated)?;
 
     Ok(())
 }

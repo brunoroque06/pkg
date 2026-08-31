@@ -64,6 +64,13 @@ impl Buffer {
     }
 }
 
+fn clean(text: &str) -> &str {
+    text.strip_prefix('"')
+        .and_then(|t| t.strip_suffix('"'))
+        .or_else(|| text.strip_prefix('\'').and_then(|t| t.strip_suffix('\'')))
+        .unwrap_or(text)
+}
+
 fn get_node<'a>(node: Node<'a>, src: &str, key: &str) -> Option<Node<'a>> {
     node.named_children(&mut node.walk())
         .find(|p| {
@@ -80,8 +87,7 @@ mod tests {
 
     const JSON_INVALID: &str = "{";
     const JSON_EMPTY: &str = "{}";
-    const JSON: &str =
-        r#"{"name": "app", "ver": "0.0.1", "deps": {"lib": "9.28", "lib2": "22.3"}}"#;
+    const JSON: &str = r#"{"name": "app", "ver": "0.0.1", "deps": {"lib": "22.3", "lib2": "9.7"}, "devDeps": {"fmt": "28.10"}}"#;
 
     #[test]
     fn new_invalid() {
@@ -100,8 +106,8 @@ mod tests {
         let leaves = syntax.get_pairs("deps").expect("should find");
         assert_eq!(leaves.len(), 2);
         assert_eq!(leaves[0].key, "\"lib\"");
-        assert_eq!(leaves[0].value, "\"9.28\"");
+        assert_eq!(leaves[0].value, "\"22.3\"");
         assert_eq!(leaves[1].key, "\"lib2\"");
-        assert_eq!(leaves[1].value, "\"22.3\"");
+        assert_eq!(leaves[1].value, "\"9.7\"");
     }
 }
