@@ -1,7 +1,8 @@
-use crate::buffer::Lang;
+use crate::{buffer::Lang, proc::Cmd};
 
 pub trait Registry {
     fn can_handle(file: &str) -> bool;
-    fn cmd_latest_version(pkg: &str) -> String;
+    fn latest_version(pkg: &str) -> Cmd;
+    fn latest_version_parse(out: &str) -> String;
     fn manifest_type() -> Lang;
 }

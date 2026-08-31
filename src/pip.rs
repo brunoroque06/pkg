@@ -1,24 +1,21 @@
 use crate::{buffer::Lang, proc::Cmd, registry::Registry};
 
-pub struct Npm {}
+struct Pip {}
 
-// latest version of a package
-// npm view prettier version
-
-impl Registry for Npm {
+impl Registry for Pip {
     fn can_handle(file: &str) -> bool {
-        file.ends_with("package.json")
+        file.ends_with("pyproject.toml")
     }
 
     fn latest_version(pkg: &str) -> Cmd {
-        Cmd::new("npm", ["view", pkg, "version"])
+        Cmd::new("pip3", ["index", "version", "--json", pkg])
     }
 
     fn latest_version_parse(out: &str) -> String {
-        out.trim_end().to_owned()
+        todo!()
     }
 
     fn manifest_type() -> Lang {
-        Lang::Json
+        Lang::Toml
     }
 }

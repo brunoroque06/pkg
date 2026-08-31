@@ -1,8 +1,17 @@
 use std::process::{Child, Command, Stdio};
 
 pub struct Cmd {
-    pub bin: String,
+    pub bin: &'static str,
     pub args: Vec<String>,
+}
+
+impl Cmd {
+    pub fn new(bin: &'static str, args: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        Self {
+            bin,
+            args: args.into_iter().map(Into::into).collect(),
+        }
+    }
 }
 
 fn spawn(cmd: &Cmd) -> Result<Child, String> {
@@ -36,17 +45,18 @@ pub fn run_all(cmds: Vec<Cmd>) -> Result<Vec<String>, String> {
 mod test {
     use super::*;
 
-    fn run(bin: &str, args: Vec<String>) -> Result<Vec<String>, String> {
-        let cmd = Cmd {
-            bin: bin.to_owned(),
-            args,
-        };
+    fn run(bin: &'static str, args: Vec<String>) -> Result<Vec<String>, String> {
+        let cmd = Cmd::new(bin, args);
         run_all(vec![cmd])
     }
 
     #[test]
     fn run_non_existing() {
-        let res = run("i-dont-exist", vec![]);
+        let cmd = Cmd {
+            bin: "i-do-not-exist",
+            args: vec![],
+        };
+        let res = run_all(vec![cmd]);
         assert!(res.is_err());
         assert_eq!(
             res.err(),
@@ -56,14 +66,19 @@ mod test {
 
     #[test]
     fn run_exit_code() {
-        let res = run("sh", vec!["-c".to_owned(), "exit 1".to_owned()]);
+        let cmd = Cmd::new("sh", ["-c", "exit 1"]);
+        let res = run_all(vec![cmd]);
         assert!(res.is_err());
         assert_eq!(res.err(), Some("command failed: ".to_owned()));
     }
 
     #[test]
     fn run_valid() {
-        let res = run("cargo", vec![]);
+        let cmd = Cmd {
+            bin: "cargo",
+            args: vec![],
+        };
+        let res = run_all(vec![cmd]);
         assert!(res.is_ok());
         assert!(!res.unwrap()[0].is_empty())
     }

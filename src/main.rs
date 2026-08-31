@@ -1,6 +1,7 @@
 mod buffer;
 mod io;
 mod npm;
+mod pip;
 mod proc;
 mod registry;
 
@@ -26,15 +27,7 @@ fn main() -> Result<(), String> {
         }
     }
 
-    let versions = run_all(vec![Cmd {
-        bin: "npm".to_owned(),
-        args: vec![
-            "view".to_owned(),
-            "prettier".to_owned(),
-            "version".to_owned(),
-        ],
-    }])?;
-
+    let versions = run_all(vec![Cmd::new("npm", ["view", "prettier", "version"])])?;
     println!("versions: {}", versions.concat());
 
     // let outs = fan_out()
