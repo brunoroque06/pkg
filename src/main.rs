@@ -1,5 +1,6 @@
 mod args;
 mod buffer;
+mod cargo;
 mod io;
 mod npm;
 mod pip;
@@ -11,10 +12,11 @@ use std::path::Path;
 use crate::{
     args::parse_args,
     buffer::Buffer,
-    io::read_file,
+    cargo::Cargo,
+    io::{read_file, write_file},
     npm::Npm,
     pip::Pip,
-    proc::{Cmd, run_all},
+    proc::run_all,
     registry::Registry,
 };
 
@@ -23,36 +25,34 @@ fn main() -> Result<(), String> {
 
     let file = Path::new(&args.file);
 
-    let regs: [&dyn Registry; 2] = [&Npm, &Pip];
+    let regs: [&dyn Registry; 3] = [&Cargo, &Npm, &Pip];
 
     let reg = regs
         .iter()
-        .find(|r| r.can_handle(file))
+        .find(|r| r.supports(file))
         .ok_or(format!("cannot handle file {}", file.to_string_lossy()))?;
 
     let src = read_file(file)?;
-    let syntax = Buffer::new(src, reg.manifest_type())?;
+    let buf = Buffer::new(src, reg.manifest())?;
 
-    let deps = syntax
-        .get_pairs("devDependencies")
-        .ok_or("no dependencies found")?;
+    let deps = buf.query_pairs(&reg.query_deps())?;
 
-    let cmds = deps.iter().map(|d| reg.latest_version(d.key)).collect();
+    let cmds = deps.iter().map(|d| reg.version(d.key)).collect();
 
     let outs = run_all(cmds, args.concurrency)?;
 
     let latest = deps
-        .iter()
+        .into_iter()
         .zip(&outs)
-        .map(|(d, o)| (d.key, reg.latest_version_parse(o)))
-        .collect::<Vec<_>>();
+        .map(|(d, o)| {
+            let value = reg.parse_version(o)?;
+            Ok(d.with_value(value))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
 
-    for (d, l) in latest {
-        println!("{d}: {l}");
-    }
+    let replaced = buf.replace(latest);
 
-    let versions = run_all(vec![Cmd::new("npm", ["view", "prettier", "version"])], 4)?;
-    println!("versions: {}", versions.concat());
+    write_file(file, &replaced)?;
 
     Ok(())
 }

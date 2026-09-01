@@ -1,4 +1,6 @@
-use tree_sitter::{Language, Node, Parser};
+use std::{cmp::Reverse, ops::Range};
+
+use tree_sitter::{Language, Node, Parser, Query, QueryCursor, StreamingIteratorMut};
 
 pub enum Lang {
     Json,
@@ -20,16 +22,27 @@ pub struct Buffer {
 }
 
 pub struct Pair<'a> {
-    pub(crate) key: &'a str,
-    pub(crate) value: &'a str,
-    node: Node<'a>,
+    pub key: &'a str,
+    pub value: &'a str,
+    range: Range<usize>,
+}
+
+pub struct Edit<'a> {
+    pair: Pair<'a>,
+    value: String,
+}
+
+impl<'a> Pair<'a> {
+    pub fn with_value(self, value: String) -> Edit<'a> {
+        Edit { pair: self, value }
+    }
 }
 
 impl Buffer {
-    pub fn new(src: String, typ: Lang) -> Result<Buffer, String> {
+    pub fn new(src: String, lang: Lang) -> Result<Buffer, String> {
         let mut parser = Parser::new();
         parser
-            .set_language(&typ.language())
+            .set_language(&lang.language())
             .map_err(|e| e.to_string())?;
         let fail = "failed to parse source";
         let tree = parser.parse(&src, None).ok_or_else(|| fail.to_owned())?;
@@ -39,49 +52,60 @@ impl Buffer {
         Ok(Buffer { src, tree })
     }
 
-    pub fn get_pairs(&self, key: &str) -> Option<Vec<Pair<'_>>> {
-        let root = self.tree.root_node().named_child(0)?;
-        let Some(parent) = get_node(root, &self.src, key) else {
-            return Some(Vec::new());
+    pub fn query_pairs(&self, query: &str) -> Result<Vec<Pair<'_>>, String> {
+        let query = Query::new(&self.tree.language(), query).map_err(|e| e.to_string())?;
+
+        let index = |id: &str| {
+            query
+                .capture_index_for_name(id)
+                .ok_or(format!("query must capture @{}", id))
         };
-        let mut cursor = parent.walk();
 
-        let leaves = parent
-            .named_children(&mut cursor)
-            .map(|child| {
-                let key_node = child.child_by_field_name("key")?;
-                let value_node = child.child_by_field_name("value")?;
+        let key_id = index("key")?;
+        let value_id = index("value")?;
 
-                let key = key_node.utf8_text(self.src.as_bytes()).ok()?;
-                let value = value_node.utf8_text(self.src.as_bytes()).ok()?;
+        let mut cursor = QueryCursor::new();
+        let mut matches = cursor.matches(&query, self.tree.root_node(), self.src.as_bytes());
 
-                Some(Pair {
-                    key: clean(key),
-                    value: clean(value),
-                    node: value_node,
-                })
-            })
-            .collect::<Option<Vec<_>>>()?;
+        let mut pairs = Vec::new();
 
-        Some(leaves)
+        while let Some(m) = matches.next_mut() {
+            let get_id = |id: &str, idx: u32| {
+                m.captures
+                    .iter()
+                    .find(|c| c.index == idx)
+                    .map(|c| c.node)
+                    .ok_or(format!("match missing @{}", id))
+            };
+            let key_node = get_id("key", key_id)?;
+            let value_node = get_id("value", value_id)?;
+
+            let get_value =
+                |n: Node<'_>| n.utf8_text(self.src.as_bytes()).map_err(|e| e.to_string());
+            let key = get_value(key_node)?;
+            let value = get_value(value_node)?;
+
+            pairs.push(Pair {
+                key,
+                value,
+                range: value_node.byte_range(),
+            });
+        }
+
+        Ok(pairs)
     }
-}
 
-fn clean(text: &str) -> &str {
-    text.strip_prefix('"')
-        .and_then(|t| t.strip_suffix('"'))
-        .or_else(|| text.strip_prefix('\'').and_then(|t| t.strip_suffix('\'')))
-        .unwrap_or(text)
-}
+    pub fn replace(&self, mut edits: Vec<Edit>) -> String {
+        edits.sort_unstable_by_key(|e| Reverse(e.pair.range.end));
 
-fn get_node<'a>(node: Node<'a>, src: &str, key: &str) -> Option<Node<'a>> {
-    node.named_children(&mut node.walk())
-        .find(|p| {
-            p.child_by_field_name("key")
-                .and_then(|k| k.utf8_text(src.as_bytes()).ok())
-                == Some(&format!("\"{key}\""))
-        })?
-        .child_by_field_name("value")
+        let mut src = self.src.clone();
+
+        for e in edits {
+            src.replace_range(e.pair.range, &e.value);
+        }
+
+        src
+    }
 }
 
 #[cfg(test)]
@@ -90,27 +114,115 @@ mod tests {
 
     const JSON_INVALID: &str = "{";
     const JSON_EMPTY: &str = "{}";
-    const JSON: &str = r#"{"name": "app", "ver": "0.0.1", "deps": {"lib": "22.3", "lib2": "9.7"}, "devDeps": {"fmt": "28.10"}}"#;
+    const JSON: &str = r#"{"name": "app", "ver": "0.0.1", "deps": {"lib0": "22.3", "lib1": "9.7"}, "devDeps": {"lib2": "28.10"}}"#;
+
+    const TOML_INVALID: &str = "[";
+    const TOML_EMPTY: &str = "";
+    const TOML: &str = r#"
+    [dependencies]
+    lib = "0.1.2"
+    lib1 = "0.1.2"
+    "#;
+
+    const JSON_QUERY_INVALID: &str = r#"
+        (
+          (document
+            (object
+              (pair
+                key: (string
+                  (string_content) @group)
+                value: (object
+                  (pair
+                    key: (string
+                      (string_content) @name)
+                    value: (string
+                      (string_content) @value))))))
+          (#any-of? @group
+            "deps")
+        )
+        "#;
+
+    const JSON_QUERY: &str = r#"
+        (
+          (document
+            (object
+              (pair
+                key: (string
+                  (string_content) @group)
+                value: (object
+                  (pair
+                    key: (string
+                      (string_content) @key)
+                    value: (string
+                      (string_content) @value))))))
+          (#any-of? @group
+            "deps"
+            "devDeps")
+        )
+        "#;
 
     #[test]
-    fn new_invalid() {
+    fn new_invalid_source() {
         assert!(Buffer::new(JSON_INVALID.to_owned(), Lang::Json).is_err());
+        assert!(Buffer::new(TOML_INVALID.to_owned(), Lang::Toml).is_err());
+    }
+
+    #[test]
+    fn new_wrong_lang() {
+        assert!(Buffer::new(JSON.to_owned(), Lang::Toml).is_err());
+        assert!(Buffer::new(TOML.to_owned(), Lang::Json).is_err());
     }
 
     #[test]
     fn new_valid() {
         assert!(Buffer::new(JSON_EMPTY.to_owned(), Lang::Json).is_ok());
         assert!(Buffer::new(JSON.to_owned(), Lang::Json).is_ok());
+        assert!(Buffer::new(TOML_EMPTY.to_owned(), Lang::Toml).is_ok());
+        assert!(Buffer::new(TOML.to_owned(), Lang::Toml).is_ok());
+    }
+
+    fn parse(src: &str) -> Buffer {
+        Buffer::new(src.to_owned(), Lang::Json).expect("should parse")
     }
 
     #[test]
-    fn children() {
-        let syntax = Buffer::new(JSON.to_owned(), Lang::Json).expect("should parse");
-        let leaves = syntax.get_pairs("deps").expect("should find");
-        assert_eq!(leaves.len(), 2);
-        assert_eq!(leaves[0].key, "lib");
-        assert_eq!(leaves[0].value, "22.3");
-        assert_eq!(leaves[1].key, "lib2");
-        assert_eq!(leaves[1].value, "9.7");
+    fn query_pairs_invalid_query() {
+        assert!(parse(JSON).query_pairs("()").is_err());
+    }
+
+    #[test]
+    fn query_pairs_missing_matches() {
+        assert!(parse(JSON).query_pairs(JSON_QUERY_INVALID).is_err());
+    }
+
+    #[test]
+    fn query_pairs() {
+        let buf = parse(JSON);
+        let pairs = buf.query_pairs(JSON_QUERY).expect("should query");
+        assert_eq!(pairs.len(), 3);
+        assert_eq!(pairs[0].key, "lib0");
+        assert_eq!(pairs[0].value, "22.3");
+    }
+
+    fn deps(buf: &Buffer) -> Vec<Pair<'_>> {
+        buf.query_pairs(JSON_QUERY).expect("should find")
+    }
+
+    #[test]
+    fn replace() {
+        let buf_o = parse(JSON);
+        let leaves_o = deps(&buf_o);
+        let edits = leaves_o
+            .into_iter()
+            .map(|l| l.with_value("dummy".to_owned()))
+            .collect();
+        let buf = parse(&buf_o.replace(edits));
+        let leaves = deps(&buf);
+
+        assert_eq!(leaves.len(), 3);
+        assert_eq!(leaves[0].key, "lib0");
+        assert_eq!(leaves[0].value, "dummy");
+        assert_eq!(leaves[1].key, "lib1");
+        assert_eq!(leaves[1].value, "dummy");
     }
 }

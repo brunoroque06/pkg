@@ -3,8 +3,9 @@ use std::path::Path;
 use crate::{buffer::Lang, proc::Cmd};
 
 pub trait Registry {
-    fn can_handle(&self, file: &Path) -> bool;
-    fn latest_version(&self, pkg: &str) -> Cmd;
-    fn latest_version_parse(&self, out: &str) -> String;
-    fn manifest_type(&self) -> Lang;
+    fn manifest(&self) -> Lang;
+    fn parse_version(&self, cmd: &str) -> Result<String, String>;
+    fn query_deps(&self) -> String;
+    fn supports(&self, file: &Path) -> bool;
+    fn version(&self, pkg: &str) -> Cmd;
 }
