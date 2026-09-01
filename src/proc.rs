@@ -15,40 +15,44 @@ impl Cmd {
 }
 
 fn spawn(cmd: &Cmd) -> Result<Child, String> {
-    Command::new(&cmd.bin)
+    Command::new(cmd.bin)
         .args(&cmd.args)
+        .stderr(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
         .map_err(|e| e.to_string())
 }
 
-pub fn run_all(cmds: Vec<Cmd>) -> Result<Vec<String>, String> {
-    cmds.into_iter()
-        .map(|c| spawn(&c))
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter()
-        .map(|c| {
+const CMD_FAILED: &str = "command failed: ";
+
+pub fn run_all(cmds: Vec<Cmd>, chunk_size: usize) -> Result<Vec<String>, String> {
+    let mut outs = Vec::with_capacity(cmds.len());
+
+    for chunk in cmds.chunks(chunk_size) {
+        let childs = chunk.iter().map(spawn).collect::<Result<Vec<_>, _>>()?;
+
+        for c in childs {
             let o = c.wait_with_output().map_err(|e| e.to_string())?;
             if o.status.success() {
-                Ok(String::from_utf8_lossy(&o.stdout).into_owned())
+                outs.push(String::from_utf8_lossy(&o.stdout).into_owned());
             } else {
-                Err(format!(
-                    "command failed: {}",
+                return Err(format!(
+                    "{}{}",
+                    CMD_FAILED,
                     String::from_utf8_lossy(&o.stderr)
-                ))
+                ));
             }
-        })
-        .collect()
+        }
+    }
+
+    Ok(outs)
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
 
-    fn run(bin: &'static str, args: Vec<String>) -> Result<Vec<String>, String> {
-        let cmd = Cmd::new(bin, args);
-        run_all(vec![cmd])
-    }
+    const CHUNK_SIZE: usize = 2;
 
     #[test]
     fn run_non_existing() {
@@ -56,7 +60,7 @@ mod test {
             bin: "i-do-not-exist",
             args: vec![],
         };
-        let res = run_all(vec![cmd]);
+        let res = run_all(vec![cmd], CHUNK_SIZE);
         assert!(res.is_err());
         assert_eq!(
             res.err(),
@@ -67,9 +71,17 @@ mod test {
     #[test]
     fn run_exit_code() {
         let cmd = Cmd::new("sh", ["-c", "exit 1"]);
-        let res = run_all(vec![cmd]);
+        let res = run_all(vec![cmd], CHUNK_SIZE);
         assert!(res.is_err());
-        assert_eq!(res.err(), Some("command failed: ".to_owned()));
+        assert_eq!(res.err(), Some(CMD_FAILED.to_owned()));
+    }
+
+    #[test]
+    fn run_prints_err() {
+        let cmd = Cmd::new("cargo", ["wrong"]);
+        let res = run_all(vec![cmd], CHUNK_SIZE);
+        assert!(res.is_err());
+        assert_ne!(res.err(), Some(CMD_FAILED.to_owned()));
     }
 
     #[test]
@@ -78,7 +90,7 @@ mod test {
             bin: "cargo",
             args: vec![],
         };
-        let res = run_all(vec![cmd]);
+        let res = run_all(vec![cmd], CHUNK_SIZE);
         assert!(res.is_ok());
         assert!(!res.unwrap()[0].is_empty())
     }

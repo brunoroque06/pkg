@@ -1,3 +1,4 @@
+mod args;
 mod buffer;
 mod io;
 mod npm;
@@ -8,6 +9,7 @@ mod registry;
 use std::path::Path;
 
 use crate::{
+    args::parse_args,
     buffer::Buffer,
     io::read_file,
     npm::Npm,
@@ -17,7 +19,9 @@ use crate::{
 };
 
 fn main() -> Result<(), String> {
-    let file = Path::new("package.json");
+    let args = parse_args();
+
+    let file = Path::new(&args.file);
 
     let regs: [&dyn Registry; 2] = [&Npm, &Pip];
 
@@ -35,7 +39,7 @@ fn main() -> Result<(), String> {
 
     let cmds = deps.iter().map(|d| reg.latest_version(d.key)).collect();
 
-    let outs = run_all(cmds)?;
+    let outs = run_all(cmds, args.concurrency)?;
 
     let latest = deps
         .iter()
@@ -47,7 +51,7 @@ fn main() -> Result<(), String> {
         println!("{d}: {l}");
     }
 
-    let versions = run_all(vec![Cmd::new("npm", ["view", "prettier", "version"])])?;
+    let versions = run_all(vec![Cmd::new("npm", ["view", "prettier", "version"])], 4)?;
     println!("versions: {}", versions.concat());
 
     Ok(())

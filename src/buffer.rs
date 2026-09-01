@@ -52,9 +52,12 @@ impl Buffer {
                 let key_node = child.child_by_field_name("key")?;
                 let value_node = child.child_by_field_name("value")?;
 
+                let key = key_node.utf8_text(self.src.as_bytes()).ok()?;
+                let value = value_node.utf8_text(self.src.as_bytes()).ok()?;
+
                 Some(Pair {
-                    key: key_node.utf8_text(self.src.as_bytes()).ok()?,
-                    value: value_node.utf8_text(self.src.as_bytes()).ok()?,
+                    key: clean(key),
+                    value: clean(value),
                     node: value_node,
                 })
             })
@@ -105,9 +108,9 @@ mod tests {
         let syntax = Buffer::new(JSON.to_owned(), Lang::Json).expect("should parse");
         let leaves = syntax.get_pairs("deps").expect("should find");
         assert_eq!(leaves.len(), 2);
-        assert_eq!(leaves[0].key, "\"lib\"");
-        assert_eq!(leaves[0].value, "\"22.3\"");
-        assert_eq!(leaves[1].key, "\"lib2\"");
-        assert_eq!(leaves[1].value, "\"9.7\"");
+        assert_eq!(leaves[0].key, "lib");
+        assert_eq!(leaves[0].value, "22.3");
+        assert_eq!(leaves[1].key, "lib2");
+        assert_eq!(leaves[1].value, "9.7");
     }
 }
