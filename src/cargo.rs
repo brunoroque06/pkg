@@ -25,20 +25,7 @@ impl Registry for Cargo {
     }
 
     fn query_deps(&self) -> String {
-        r#"
-            (
-              (table
-                (_) @table
-                (pair
-                  (_) @key
-                  (string) @value))
-              (#any-of? @table
-                "dependencies"
-                "dev-dependencies"
-                "build-dependencies")
-            )
-        "#
-        .to_owned()
+        include_str!("queries/cargo.scm").to_owned()
     }
 
     fn supports(&self, file: &Path) -> bool {
