@@ -112,54 +112,16 @@ impl Buffer {
 mod tests {
     use super::*;
 
-    const JSON_INVALID: &str = "{";
-    const JSON_EMPTY: &str = "{}";
-    const JSON: &str = r#"{"name": "app", "ver": "0.0.1", "deps": {"lib0": "22.3", "lib1": "9.7"}, "devDeps": {"lib2": "28.10"}}"#;
+    const JSON: &str = include_str!("../tests/manifests/npm.json");
+    const JSON_EMPTY: &str = include_str!("../tests/manifests/empty.json");
+    const JSON_INVALID: &str = include_str!("../tests/manifests/invalid.json");
+    const JSON_QUERY: &str = include_str!("queries/npm.scm");
+    const JSON_QUERY_INVALID: &str = include_str!("../tests/queries/invalid.scm");
 
-    const TOML_INVALID: &str = "[";
-    const TOML_EMPTY: &str = "";
-    const TOML: &str = r#"
-    [dependencies]
-    lib = "0.1.2"
-    lib1 = "0.1.2"
-    "#;
-
-    const JSON_QUERY_INVALID: &str = r#"
-        (
-          (document
-            (object
-              (pair
-                key: (string
-                  (string_content) @group)
-                value: (object
-                  (pair
-                    key: (string
-                      (string_content) @name)
-                    value: (string
-                      (string_content) @value))))))
-          (#any-of? @group
-            "deps")
-        )
-        "#;
-
-    const JSON_QUERY: &str = r#"
-        (
-          (document
-            (object
-              (pair
-                key: (string
-                  (string_content) @group)
-                value: (object
-                  (pair
-                    key: (string
-                      (string_content) @key)
-                    value: (string
-                      (string_content) @value))))))
-          (#any-of? @group
-            "deps"
-            "devDeps")
-        )
-        "#;
+    const TOML: &str = include_str!("../tests/manifests/cargo.toml");
+    const TOML_EMPTY: &str = include_str!("../tests/manifests/empty.toml");
+    const TOML_INVALID: &str = include_str!("../tests/manifests/invalid.toml");
+    const TOML_QUERY: &str = include_str!("queries/cargo.scm");
 
     #[test]
     fn new_invalid_source() {
@@ -181,43 +143,71 @@ mod tests {
         assert!(Buffer::new(TOML.to_owned(), Lang::Toml).is_ok());
     }
 
-    fn parse(src: &str) -> Buffer {
-        Buffer::new(src.to_owned(), Lang::Json).expect("should parse")
+    fn parse(src: &str, lang: Lang) -> Buffer {
+        Buffer::new(src.to_owned(), lang).expect("should parse")
     }
 
     #[test]
     fn query_pairs_invalid_query() {
-        assert!(parse(JSON).query_pairs("()").is_err());
+        assert!(parse(JSON, Lang::Json).query_pairs("()").is_err());
     }
 
     #[test]
     fn query_pairs_missing_matches() {
-        assert!(parse(JSON).query_pairs(JSON_QUERY_INVALID).is_err());
+        assert!(
+            parse(JSON, Lang::Json)
+                .query_pairs(JSON_QUERY_INVALID)
+                .is_err()
+        );
+    }
+
+    impl Buffer {
+        pub fn query_json(&self) -> Vec<Pair<'_>> {
+            self.query_pairs(JSON_QUERY).expect("should query")
+        }
+
+        pub fn query_toml(&self) -> Vec<Pair<'_>> {
+            self.query_pairs(TOML_QUERY).expect("should query")
+        }
     }
 
     #[test]
     fn query_pairs() {
-        let buf = parse(JSON);
-        let pairs = buf.query_pairs(JSON_QUERY).expect("should query");
+        let buf = parse(JSON, Lang::Json);
+        let pairs = buf.query_json();
         assert_eq!(pairs.len(), 3);
         assert_eq!(pairs[0].key, "lib0");
         assert_eq!(pairs[0].value, "22.3");
     }
 
-    fn deps(buf: &Buffer) -> Vec<Pair<'_>> {
-        buf.query_pairs(JSON_QUERY).expect("should find")
-    }
-
     #[test]
-    fn replace() {
-        let buf_o = parse(JSON);
-        let leaves_o = deps(&buf_o);
+    fn replace_json() {
+        let buf_o = parse(JSON, Lang::Json);
+        let leaves_o = buf_o.query_json();
         let edits = leaves_o
             .into_iter()
             .map(|l| l.with_value("dummy".to_owned()))
             .collect();
-        let buf = parse(&buf_o.replace(edits));
-        let leaves = deps(&buf);
+        let buf = parse(&buf_o.replace(edits), Lang::Json);
+        let leaves = buf.query_json();
+
+        assert_eq!(leaves.len(), 3);
+        assert_eq!(leaves[0].key, "lib0");
+        assert_eq!(leaves[0].value, "dummy");
+        assert_eq!(leaves[1].key, "lib1");
+        assert_eq!(leaves[1].value, "dummy");
+    }
+
+    #[test]
+    fn replace_toml() {
+        let buf_o = parse(TOML, Lang::Toml);
+        let leaves_o = buf_o.query_toml();
+        let edits = leaves_o
+            .into_iter()
+            .map(|l| l.with_value("dummy".to_owned()))
+            .collect();
+        let buf = parse(&buf_o.replace(edits), Lang::Toml);
+        let leaves = buf.query_toml();
 
         assert_eq!(leaves.len(), 3);
         assert_eq!(leaves[0].key, "lib0");

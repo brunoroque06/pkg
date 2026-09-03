@@ -1,0 +1,5 @@
+tree-sitter #incremental #parsing
+Rust bindings to the Tree-sitter parsing library
+version: 0.26.9 (latest 0.27.0)
+license: MIT
+rust-version: 1.77

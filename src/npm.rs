@@ -30,7 +30,7 @@ impl Registry for Npm {
 mod tests {
     use crate::{buffer::Buffer, npm::Npm, registry::Registry};
 
-    const JSON: &str = r#"{"name": "app", "ver": "0.0.1", "dependencies": {"lib": "22.3", "lib2": "9.7"}, "devDependencies": {"lib3": "28.10"}}"#;
+    const JSON: &str = include_str!("../tests/manifests/npm.json");
 
     #[test]
     fn query() {

@@ -30,18 +30,7 @@ impl Registry for Pip {
 mod tests {
     use crate::{buffer::Buffer, pip::Pip, registry::Registry};
 
-    const TOML: &str = r#"
-        [project]
-        dependencies = [
-          "lib==1.2.3",
-        ]
-
-        [dependency-groups]
-        dev = [
-          "lib2==1.0.0",
-          "lib3==9.0.3",
-        ]
-    "#;
+    const TOML: &str = include_str!("../tests/manifests/pip.toml");
 
     // #[test]
     // fn query() {

@@ -41,27 +41,10 @@ impl Registry for Cargo {
 mod tests {
     use crate::{buffer::Buffer, cargo::Cargo, registry::Registry};
 
-    const CARGO_INFO: &str = r#"
-        tree-sitter #incremental #parsing
-        Rust bindings to the Tree-sitter parsing library
-        version: 0.26.9
-        license: MIT
-        rust-version: 1.77
-    "#;
+    const CARGO_INFO: &str = include_str!("../tests/cmds/cargo-info.txt");
+    const CARGO_INFO_LATEST: &str = include_str!("../tests/cmds/cargo-info-latest.txt");
 
-    const CARGO_INFO_LATEST: &str = r#"
-        tree-sitter #incremental #parsing
-        Rust bindings to the Tree-sitter parsing library
-        version: 0.26.9 (latest 0.27.0)
-        license: MIT
-        rust-version: 1.77
-    "#;
-
-    const TOML: &str = r#"
-        [dependencies]
-        tree-sitter = "0.26.9"
-        tree-sitter-json = "0.24.8"
-    "#;
+    const TOML: &str = include_str!("../tests/manifests/cargo.toml");
 
     #[test]
     fn query() {

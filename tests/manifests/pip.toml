@@ -1,0 +1,10 @@
+[project]
+dependencies = [
+  "lib0==1.2.3",
+]
+
+[dependency-groups]
+dev = [
+  "lib1==1.0.0",
+  "lib2==9.0.3",
+]
