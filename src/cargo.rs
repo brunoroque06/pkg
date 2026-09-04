@@ -50,7 +50,7 @@ mod tests {
     fn query() {
         let buf = Buffer::new(TOML.to_owned(), Cargo.manifest()).expect("should parse");
         let pairs = buf.query_pairs(&Cargo.query_deps()).expect("should query");
-        assert_eq!(pairs.len(), 2);
+        assert_eq!(pairs.len(), 3);
     }
 
     #[test]
