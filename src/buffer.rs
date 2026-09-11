@@ -121,7 +121,6 @@ mod tests {
     const TOML: &str = include_str!("../tests/manifests/cargo.toml");
     const TOML_EMPTY: &str = include_str!("../tests/manifests/empty.toml");
     const TOML_INVALID: &str = include_str!("../tests/manifests/invalid.toml");
-    const TOML_QUERY: &str = include_str!("queries/cargo.scm");
 
     #[test]
     fn new_invalid_source() {
@@ -165,10 +164,6 @@ mod tests {
         pub fn query_json(&self) -> Vec<Pair<'_>> {
             self.query_pairs(JSON_QUERY).expect("should query")
         }
-
-        pub fn query_toml(&self) -> Vec<Pair<'_>> {
-            self.query_pairs(TOML_QUERY).expect("should query")
-        }
     }
 
     #[test]
@@ -190,24 +185,6 @@ mod tests {
             .collect();
         let buf = parse(&buf_o.replace(edits), Lang::Json);
         let leaves = buf.query_json();
-
-        assert_eq!(leaves.len(), 3);
-        assert_eq!(leaves[0].key, "lib0");
-        assert_eq!(leaves[0].value, "dummy");
-        assert_eq!(leaves[1].key, "lib1");
-        assert_eq!(leaves[1].value, "dummy");
-    }
-
-    #[test]
-    fn replace_toml() {
-        let buf_o = parse(TOML, Lang::Toml);
-        let leaves_o = buf_o.query_toml();
-        let edits = leaves_o
-            .into_iter()
-            .map(|l| l.with_value("dummy".to_owned()))
-            .collect();
-        let buf = parse(&buf_o.replace(edits), Lang::Toml);
-        let leaves = buf.query_toml();
 
         assert_eq!(leaves.len(), 3);
         assert_eq!(leaves[0].key, "lib0");

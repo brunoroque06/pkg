@@ -5,24 +5,24 @@ use crate::{buffer::Lang, proc::Cmd, registry::Registry};
 pub struct Pip;
 
 impl Registry for Pip {
+    fn cmd_parse(&self, out: &str) -> Result<String, String> {
+        Ok(out.to_owned())
+    }
+
+    fn cmd_version(&self, pkg: &str) -> Cmd {
+        Cmd::new("pip3", ["index", "version", "--json", pkg])
+    }
+
+    fn deps_query(&self) -> String {
+        todo!()
+    }
+
     fn manifest(&self) -> Lang {
         Lang::Toml
     }
 
-    fn parse_version(&self, out: &str) -> Result<String, String> {
-        Ok(out.to_owned())
-    }
-
-    fn query_deps(&self) -> String {
-        todo!()
-    }
-
     fn supports(&self, file: &Path) -> bool {
         file.ends_with("pyproject.toml")
-    }
-
-    fn version(&self, pkg: &str) -> Cmd {
-        Cmd::new("pip3", ["index", "version", "--json", pkg])
     }
 }
 
@@ -30,7 +30,7 @@ impl Registry for Pip {
 mod tests {
     use crate::{buffer::Buffer, pip::Pip, registry::Registry};
 
-    const TOML: &str = include_str!("../tests/manifests/pip.toml");
+    const TOML: &str = include_str!("../tests/manifests/pyproject.toml");
 
     // #[test]
     // fn query() {

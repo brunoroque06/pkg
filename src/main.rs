@@ -30,14 +30,14 @@ fn main() -> Result<(), String> {
     let reg = regs
         .iter()
         .find(|r| r.supports(file))
-        .ok_or(format!("cannot handle file {}", file.to_string_lossy()))?;
+        .ok_or(format!("cannot handle {}", file.to_string_lossy()))?;
 
     let src = read_file(file)?;
     let buf = Buffer::new(src, reg.manifest())?;
 
-    let deps = buf.query_pairs(&reg.query_deps())?;
+    let deps = buf.query_pairs(&reg.deps_query())?;
 
-    let cmds = deps.iter().map(|d| reg.version(d.key)).collect();
+    let cmds = deps.iter().map(|d| reg.cmd_version(d.key)).collect();
 
     let outs = run_all(cmds, args.concurrency)?;
 
@@ -45,7 +45,7 @@ fn main() -> Result<(), String> {
         .into_iter()
         .zip(&outs)
         .map(|(d, o)| {
-            let value = reg.parse_version(o)?;
+            let value = reg.cmd_parse(o)?;
             Ok(d.with_value(value))
         })
         .collect::<Result<Vec<_>, String>>()?;

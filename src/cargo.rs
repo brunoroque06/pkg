@@ -5,11 +5,7 @@ use crate::{buffer::Lang, proc::Cmd, registry::Registry};
 pub struct Cargo;
 
 impl Registry for Cargo {
-    fn manifest(&self) -> Lang {
-        Lang::Toml
-    }
-
-    fn parse_version(&self, out: &str) -> Result<String, String> {
+    fn cmd_parse(&self, out: &str) -> Result<String, String> {
         let err = "cannot parse version";
         let version = out
             .lines()
@@ -24,16 +20,20 @@ impl Registry for Cargo {
         }
     }
 
-    fn query_deps(&self) -> String {
+    fn cmd_version(&self, pkg: &str) -> Cmd {
+        Cmd::new("cargo", ["info", pkg])
+    }
+
+    fn deps_query(&self) -> String {
         include_str!("queries/cargo.scm").to_owned()
+    }
+
+    fn manifest(&self) -> Lang {
+        Lang::Toml
     }
 
     fn supports(&self, file: &Path) -> bool {
         file.ends_with("Cargo.toml")
-    }
-
-    fn version(&self, pkg: &str) -> Cmd {
-        Cmd::new("cargo", ["info", pkg])
     }
 }
 
@@ -49,19 +49,19 @@ mod tests {
     #[test]
     fn query() {
         let buf = Buffer::new(TOML.to_owned(), Cargo.manifest()).expect("should parse");
-        let pairs = buf.query_pairs(&Cargo.query_deps()).expect("should query");
+        let pairs = buf.query_pairs(&Cargo.deps_query()).expect("should query");
         assert_eq!(pairs.len(), 3);
     }
 
     #[test]
     fn version_parse() {
-        assert_eq!(Cargo.parse_version(CARGO_INFO), Ok("0.26.9".to_owned()));
+        assert_eq!(Cargo.cmd_parse(CARGO_INFO), Ok("0.26.9".to_owned()));
     }
 
     #[test]
     fn version_latest_parse() {
         assert_eq!(
-            Cargo.parse_version(CARGO_INFO_LATEST),
+            Cargo.cmd_parse(CARGO_INFO_LATEST),
             Ok("0.27.0".to_owned())
         );
     }
