@@ -35,7 +35,12 @@ fn main() -> Result<(), String> {
     let src = read_file(file)?;
     let buf = Buffer::new(src, reg.manifest())?;
 
-    let deps = buf.query_pairs(&reg.deps_query())?;
+    let pairs = buf.query_pairs(&reg.deps_query())?;
+
+    let deps = pairs
+        .into_iter()
+        .map(|p| reg.dep_parse(p))
+        .collect::<Result<Vec<_>, String>>()?;
 
     let cmds = deps.iter().map(|d| reg.cmd_version(d.key)).collect();
 

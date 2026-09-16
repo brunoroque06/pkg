@@ -1,6 +1,10 @@
 use std::path::Path;
 
-use crate::{buffer::Lang, proc::Cmd, registry::Registry};
+use crate::{
+    buffer::{Lang, Pair},
+    proc::Cmd,
+    registry::Registry,
+};
 
 pub struct Cargo;
 
@@ -24,6 +28,14 @@ impl Registry for Cargo {
         Cmd::new("cargo", ["info", pkg])
     }
 
+    fn dep_parse<'a>(&self, pair: Pair<'a>) -> Result<Pair<'a>, String> {
+        Ok(Pair {
+            key: pair.key,
+            value: pair.value,
+            range: (pair.range.start + 1)..(pair.range.end - 1),
+        })
+    }
+
     fn deps_query(&self) -> String {
         include_str!("queries/cargo.scm").to_owned()
     }
@@ -39,7 +51,11 @@ impl Registry for Cargo {
 
 #[cfg(test)]
 mod tests {
-    use crate::{buffer::Buffer, cargo::Cargo, registry::Registry};
+    use crate::{
+        buffer::{Buffer, Pair},
+        cargo::Cargo,
+        registry::Registry,
+    };
 
     const CARGO_INFO: &str = include_str!("../tests/cmds/cargo-info.txt");
     const CARGO_INFO_LATEST: &str = include_str!("../tests/cmds/cargo-info-latest.txt");
@@ -60,9 +76,18 @@ mod tests {
 
     #[test]
     fn version_latest_parse() {
-        assert_eq!(
-            Cargo.cmd_parse(CARGO_INFO_LATEST),
-            Ok("0.27.0".to_owned())
-        );
+        assert_eq!(Cargo.cmd_parse(CARGO_INFO_LATEST), Ok("0.27.0".to_owned()));
+    }
+
+    #[test]
+    fn deps_parse_shifts_range() {
+        let p = Pair {
+            key: "key",
+            value: "val",
+            range: 0..9,
+        };
+        let rang = Cargo.dep_parse(p).expect("should parse");
+        assert_eq!(rang.range.start, 1);
+        assert_eq!(rang.range.end, 8);
     }
 }

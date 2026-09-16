@@ -1,6 +1,10 @@
 use std::path::Path;
 
-use crate::{buffer::Lang, proc::Cmd, registry::Registry};
+use crate::{
+    buffer::{Lang, Pair},
+    proc::Cmd,
+    registry::Registry,
+};
 
 pub struct Npm;
 
@@ -11,6 +15,10 @@ impl Registry for Npm {
 
     fn cmd_version(&self, pkg: &str) -> Cmd {
         Cmd::new("npm", ["view", pkg, "version"])
+    }
+
+    fn dep_parse<'a>(&self, pair: Pair<'a>) -> Result<Pair<'a>, String> {
+        Ok(pair)
     }
 
     fn deps_query(&self) -> String {

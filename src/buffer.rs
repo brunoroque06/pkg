@@ -24,7 +24,7 @@ pub struct Buffer {
 pub struct Pair<'a> {
     pub key: &'a str,
     pub value: &'a str,
-    range: Range<usize>,
+    pub range: Range<usize>,
 }
 
 pub struct Edit<'a> {
@@ -71,7 +71,7 @@ impl Buffer {
 
         while let Some(m) = matches.next_mut() {
             let get_id = |id: &str, idx: u32| {
-                m.captures
+                m.captures()
                     .iter()
                     .find(|c| c.index == idx)
                     .map(|c| c.node)
