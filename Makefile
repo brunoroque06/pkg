@@ -11,3 +11,5 @@ fmt-check:
 
 test:
 	cargo test
+
+ci: fmt-check build test
