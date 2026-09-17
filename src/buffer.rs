@@ -28,8 +28,8 @@ pub struct Pair<'a> {
 }
 
 pub struct Edit<'a> {
-    pair: Pair<'a>,
-    value: String,
+    pub pair: Pair<'a>,
+    pub value: String,
 }
 
 impl<'a> Pair<'a> {

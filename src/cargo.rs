@@ -31,7 +31,7 @@ impl Registry for Cargo {
     fn dep_parse<'a>(&self, pair: Pair<'a>) -> Result<Pair<'a>, String> {
         Ok(Pair {
             key: pair.key,
-            value: pair.value,
+            value: &pair.value[1..pair.value.len() - 1],
             range: (pair.range.start + 1)..(pair.range.end - 1),
         })
     }
@@ -51,11 +51,7 @@ impl Registry for Cargo {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        buffer::{Buffer, Pair},
-        cargo::Cargo,
-        registry::Registry,
-    };
+    use crate::{buffer::Buffer, cargo::Cargo, registry::Registry};
 
     const CARGO_INFO: &str = include_str!("../tests/cmds/cargo-info.txt");
     const CARGO_INFO_LATEST: &str = include_str!("../tests/cmds/cargo-info-latest.txt");
@@ -70,24 +66,27 @@ mod tests {
     }
 
     #[test]
-    fn version_parse() {
+    fn cmd_parse() {
         assert_eq!(Cargo.cmd_parse(CARGO_INFO), Ok("0.26.9".to_owned()));
     }
 
     #[test]
-    fn version_latest_parse() {
+    fn cmd_parse_latest() {
         assert_eq!(Cargo.cmd_parse(CARGO_INFO_LATEST), Ok("0.27.0".to_owned()));
     }
 
     #[test]
     fn deps_parse_shifts_range() {
-        let p = Pair {
-            key: "key",
-            value: "val",
-            range: 0..9,
-        };
-        let rang = Cargo.dep_parse(p).expect("should parse");
-        assert_eq!(rang.range.start, 1);
-        assert_eq!(rang.range.end, 8);
+        let buf = Buffer::new(TOML.to_owned(), Cargo.manifest()).expect("should parse");
+        let pairs = buf.query_pairs(&Cargo.deps_query()).expect("should query");
+        let deps = pairs
+            .into_iter()
+            .map(|p| Cargo.dep_parse(p).expect("should parse"))
+            .collect::<Vec<_>>();
+        let dep = deps.first().expect("should have");
+        assert_eq!(dep.key, "chrono");
+        assert_eq!(dep.value, "0.4.45");
+        assert_eq!(dep.range.start, 37);
+        assert_eq!(dep.range.end, 43);
     }
 }

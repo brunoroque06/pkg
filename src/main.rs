@@ -55,9 +55,21 @@ fn main() -> Result<(), String> {
         })
         .collect::<Result<Vec<_>, String>>()?;
 
-    let replaced = buf.replace(latest);
+    let edits = latest
+        .into_iter()
+        .filter(|e| e.pair.value != e.value)
+        .collect::<Vec<_>>();
 
-    write_file(file, &replaced)?;
+    if edits.is_empty() {
+        println!("No packages to upgrade")
+    } else {
+        println!("Upgrading:");
+        for e in edits.iter() {
+            println!("\t{} {} -> {}", e.pair.key, e.pair.value, e.value);
+        }
+        let replaced = buf.replace(edits);
+        write_file(file, &replaced)?;
+    }
 
     Ok(())
 }
