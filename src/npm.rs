@@ -43,7 +43,9 @@ mod tests {
     #[test]
     fn query() {
         let buf = Buffer::new(JSON.to_owned(), Npm.manifest()).expect("should parse");
-        let pairs = buf.query_pairs(&Npm.deps_query()).expect("should query");
+        let pairs = buf
+            .query_pairs(&Npm.deps_query(), None)
+            .expect("should query");
         assert_eq!(pairs.len(), 3);
     }
 }

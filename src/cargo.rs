@@ -61,7 +61,9 @@ mod tests {
     #[test]
     fn query() {
         let buf = Buffer::new(TOML.to_owned(), Cargo.manifest()).expect("should parse");
-        let pairs = buf.query_pairs(&Cargo.deps_query()).expect("should query");
+        let pairs = buf
+            .query_pairs(&Cargo.deps_query(), None)
+            .expect("should query");
         assert_eq!(pairs.len(), 3);
     }
 
@@ -78,7 +80,9 @@ mod tests {
     #[test]
     fn deps_parse_shifts_range() {
         let buf = Buffer::new(TOML.to_owned(), Cargo.manifest()).expect("should parse");
-        let pairs = buf.query_pairs(&Cargo.deps_query()).expect("should query");
+        let pairs = buf
+            .query_pairs(&Cargo.deps_query(), None)
+            .expect("should query");
         let deps = pairs
             .into_iter()
             .map(|p| Cargo.dep_parse(p).expect("should parse"))

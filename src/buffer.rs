@@ -1,6 +1,6 @@
-use std::{cmp::Reverse, ops::Range};
+use std::{cmp::Reverse, ops::Range, str::FromStr};
 
-use tree_sitter::{Language, Node, Parser, Query, QueryCursor, StreamingIteratorMut};
+use tree_sitter::{Language, Node, Parser, Point, Query, QueryCursor, StreamingIteratorMut};
 
 pub enum Lang {
     Json,
@@ -19,6 +19,28 @@ impl Lang {
 pub struct Buffer {
     src: String,
     tree: tree_sitter::Tree,
+}
+
+#[derive(Debug)]
+pub struct Position {
+    pub line: usize,
+    pub column: Option<usize>,
+}
+
+impl FromStr for Position {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let num = |v: &str| match v.parse::<usize>() {
+            Ok(n) if n > 0 => Ok(n),
+            _ => Err(format!("invalid position {s:?}")),
+        };
+        let (line, column) = match s.split_once(":") {
+            Some((l, c)) => (num(l)?, Some(num(c)?)),
+            None => (num(s)?, None),
+        };
+        Ok(Position { line, column })
+    }
 }
 
 pub struct Pair<'a> {
@@ -52,7 +74,11 @@ impl Buffer {
         Ok(Buffer { src, tree })
     }
 
-    pub fn query_pairs(&self, query: &str) -> Result<Vec<Pair<'_>>, String> {
+    pub fn query_pairs(
+        &self,
+        query: &str,
+        position: Option<Position>,
+    ) -> Result<Vec<Pair<'_>>, String> {
         let query = Query::new(&self.tree.language(), query).map_err(|e| e.to_string())?;
 
         let index = |id: &str| {
@@ -79,6 +105,21 @@ impl Buffer {
             };
             let key_node = get_id("key", key_id)?;
             let value_node = get_id("value", value_id)?;
+
+            if let Some(p) = &position {
+                let (start, end) = (key_node.start_position(), value_node.end_position());
+                let row = p.line - 1;
+                let hit = match p.column {
+                    None => start.row <= row && row <= end.row,
+                    Some(c) => {
+                        let at = Point::new(row, c - 1);
+                        start <= at && at < end
+                    }
+                };
+                if !hit {
+                    continue;
+                }
+            }
 
             let get_value =
                 |n: Node<'_>| n.utf8_text(self.src.as_bytes()).map_err(|e| e.to_string());
@@ -111,6 +152,34 @@ impl Buffer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn position_invalid() {
+        fn assert_err(s: &str) {
+            assert!(Position::from_str(s).is_err());
+        }
+        assert_err("");
+        assert_err("a");
+        assert_err("0");
+        assert_err("1:");
+        assert_err("1:0");
+        assert_err("1:a");
+        assert_err(":1");
+        assert_err("a:1");
+        assert_err("1:2:3");
+    }
+
+    #[test]
+    fn position_valid() {
+        fn assert_ok(s: &str, line: usize, col: Option<usize>) {
+            let pos = Position::from_str(s).expect("should parse");
+
+            assert_eq!(pos.line, line);
+            assert_eq!(pos.column, col);
+        }
+        assert_ok("1", 1, None);
+        assert_ok("1:2", 1, Some(2));
+    }
 
     const JSON: &str = include_str!("../tests/manifests/npm.json");
     const JSON_EMPTY: &str = include_str!("../tests/manifests/empty.json");
@@ -148,43 +217,68 @@ mod tests {
 
     #[test]
     fn query_pairs_invalid_query() {
-        assert!(parse(JSON, Lang::Json).query_pairs("()").is_err());
+        assert!(parse(JSON, Lang::Json).query_pairs("()", None).is_err());
     }
 
     #[test]
     fn query_pairs_missing_matches() {
         assert!(
             parse(JSON, Lang::Json)
-                .query_pairs(JSON_QUERY_INVALID)
+                .query_pairs(JSON_QUERY_INVALID, None)
                 .is_err()
         );
     }
 
     impl Buffer {
-        pub fn query_json(&self) -> Vec<Pair<'_>> {
-            self.query_pairs(JSON_QUERY).expect("should query")
+        fn query_json(&self, position: Option<Position>) -> Vec<Pair<'_>> {
+            self.query_pairs(JSON_QUERY, position)
+                .expect("should query")
         }
     }
 
     #[test]
     fn query_pairs() {
         let buf = parse(JSON, Lang::Json);
-        let pairs = buf.query_json();
+        let pairs = buf.query_json(None);
         assert_eq!(pairs.len(), 3);
         assert_eq!(pairs[0].key, "lib0");
         assert_eq!(pairs[0].value, "22.3");
     }
 
     #[test]
+    fn query_pairs_with_position_line() {
+        let buf = parse(JSON, Lang::Json);
+        let pairs = buf.query_json(Some(Position {
+            line: 4,
+            column: None,
+        }));
+        assert_eq!(pairs.len(), 2);
+        assert_eq!(pairs[0].key, "lib0");
+        assert_eq!(pairs[0].value, "22.3");
+    }
+
+    #[test]
+    fn query_pairs_with_position_column() {
+        let buf = parse(JSON, Lang::Json);
+        let pairs = buf.query_json(Some(Position {
+            line: 4,
+            column: Some(38),
+        }));
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0].key, "lib1");
+        assert_eq!(pairs[0].value, "9.7");
+    }
+
+    #[test]
     fn replace_json() {
         let buf_o = parse(JSON, Lang::Json);
-        let leaves_o = buf_o.query_json();
+        let leaves_o = buf_o.query_json(None);
         let edits = leaves_o
             .into_iter()
             .map(|l| l.with_value("dummy".to_owned()))
             .collect();
         let buf = parse(&buf_o.replace(edits), Lang::Json);
-        let leaves = buf.query_json();
+        let leaves = buf.query_json(None);
 
         assert_eq!(leaves.len(), 3);
         assert_eq!(leaves[0].key, "lib0");

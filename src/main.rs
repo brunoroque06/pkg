@@ -35,7 +35,7 @@ fn main() -> Result<(), String> {
     let src = read_file(file)?;
     let buf = Buffer::new(src, reg.manifest())?;
 
-    let pairs = buf.query_pairs(&reg.deps_query())?;
+    let pairs = buf.query_pairs(&reg.deps_query(), args.position)?;
 
     let deps = pairs
         .into_iter()

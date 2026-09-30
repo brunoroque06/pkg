@@ -11,7 +11,7 @@ pub struct Pip;
 impl Registry for Pip {
     fn cmd_parse(&self, out: &str) -> Result<String, String> {
         let buf = Buffer::new(out.to_owned(), Lang::Json)?;
-        let pairs = buf.query_pairs(include_str!("queries/pip_cmd.scm"))?;
+        let pairs = buf.query_pairs(include_str!("queries/pip_cmd.scm"), None)?;
         let pair = pairs.first().ok_or("pip output missing lastest version")?;
         Ok(pair.value.to_owned())
     }
@@ -57,14 +57,18 @@ mod tests {
     #[test]
     fn query() {
         let buf = Buffer::new(TOML.to_owned(), Pip.manifest()).expect("should parse");
-        let pairs = buf.query_pairs(&Pip.deps_query()).expect("should query");
+        let pairs = buf
+            .query_pairs(&Pip.deps_query(), None)
+            .expect("should query");
         assert_eq!(pairs.len(), 3);
     }
 
     #[test]
     fn parse_dep_splits() {
         let buf = Buffer::new(TOML.to_owned(), Pip.manifest()).expect("should parse");
-        let pairs = buf.query_pairs(&Pip.deps_query()).expect("should query");
+        let pairs = buf
+            .query_pairs(&Pip.deps_query(), None)
+            .expect("should query");
         let pair = pairs.into_iter().next().expect("should have 3");
         let dep = Pip.dep_parse(pair).expect("should parse");
         assert_eq!(dep.key, "lib0");
